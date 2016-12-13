@@ -178,6 +178,7 @@ GameObject:
   - 124: {fileID: 1780581673}
   - 81: {fileID: 1780581672}
   - 114: {fileID: 1780581676}
+  - 114: {fileID: 1780581677}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -235,7 +236,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
+  near clip plane: 0.1
   far clip plane: 10
   field of view: 45
   orthographic: 0
@@ -259,7 +260,7 @@ MonoBehaviour:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 1780581670}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d901ddf32d7c84ed4b0f84623ef3a7a0, type: 3}
   m_Name: 
@@ -270,6 +271,18 @@ MonoBehaviour:
   _sampleCountValue: 24
   _downsampling: 0
   _occlusionSource: 2
-  _ambientOnly: 1
+  _ambientOnly: 0
   _aoShader: {fileID: 4800000, guid: 7541b5f18b1224a81927d8b1184b122b, type: 3}
   _quadMesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1780581677
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 1780581670}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e44b0a91a9a3c804bb4db2c096e16097, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _shader: {fileID: 4800000, guid: 7938dcdc61d9c394ea2be5d71b55f73e, type: 3}
