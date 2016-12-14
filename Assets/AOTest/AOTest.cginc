@@ -114,7 +114,7 @@ float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
 half4 frag(v2f_img input) : SV_Target
 {
     const int kDiv1 = 20;
-    const int kDiv2 = 40;
+    const int kDiv2 = 50;
 
     // Parameters used in coordinate conversion
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
@@ -129,22 +129,23 @@ half4 frag(v2f_img input) : SV_Target
     float3 v0 = normalize(-p0);
 
     float vis = 0;
+    float total = 0;
 
     UNITY_LOOP for (int i = 0; i < kDiv1; i++)
     {
-        float phi = UVRandom(input.uv.x - i * 0.7828, input.uv.y + i * 0.2673) * UNITY_PI;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 3;
+        float phi = UVRandom(input.uv.x - i * 0.7828, input.uv.y + i * 0.2673) * UNITY_PI * 2;
+        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 4;
 
-        float2 uv1 = input.uv + duv;
-        float2 uv2 = input.uv - duv;
+        float2 uv1 = input.uv - duv;
+        float2 uv2 = input.uv + duv;
 
         float h1 = -1;
         float h2 = -1;
 
         for (int j = 0; j < kDiv2; j++)
         {
-            float z1 = SampleDepth(uv1);
-            float z2 = SampleDepth(uv2);
+            float z1 = SampleDepth(uv2);
+            float z2 = SampleDepth(uv1);
 
             float3 d1 = ReconstructViewPos(uv1, z1, p11_22, p13_31) - p0;
             float3 d2 = ReconstructViewPos(uv2, z2, p11_22, p13_31) - p0;
@@ -152,27 +153,32 @@ half4 frag(v2f_img input) : SV_Target
             h1 = max(h1, dot(d1, v0) / length(d1));
             h2 = max(h2, dot(d2, v0) / length(d2));
 
-            uv1 += duv;
-            uv2 -= duv;
+            uv1 -= duv;
+            uv2 += duv;
         }
 
-        h1 = acos(h1);
-        h2 = -acos(h2);
+        h1 = -acos(h1);
+        h2 = +acos(h2);
 
-        float3 sn = normalize(cross(v0, float3(CosSin(phi), 0)));
+        float3 sn = normalize(cross(v0, float3(CosSin(phi) * float2(-1, -1), 0)));
         float3 np = n0 - sn * dot(sn, n0);
         float cont = length(np);
 
-        float n = acos(dot(np, v0) / length(np));
+        total += cont;
 
-        h1 = n + min(h1 - n,  0.5 * UNITY_PI);
-        h2 = n + max(h2 - n, -0.5 * UNITY_PI);
-        h2 *= -1;
+        float n = acos(dot(np, v0) / length(np));
+        if (dot(np, float3(CosSin(phi) * float2(-1, -1), 0)) < 0) n = -n;
+
+        h1 = n + max(h1 - n, -0.5 * UNITY_PI);
+        h2 = n + min(h2 - n,  0.5 * UNITY_PI);
+
+        //h1 = -h1;
+        //n = abs(n);
 
         vis +=
             0.25 * cont * (-cos(2 * h1 - n) + cos(n) + 2 * h1 * sin(n)) +
             0.25 * cont * (-cos(2 * h2 - n) + cos(n) + 2 * h2 * sin(n));
     }
 
-    return 2 * vis / kDiv1 / UNITY_PI;
+    return vis / total;
 }
