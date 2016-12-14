@@ -59,9 +59,9 @@ float LinearizeDepth(float z)
 float SampleDepth(float2 uv)
 {
 #if defined(SOURCE_GBUFFER) || defined(SOURCE_DEPTH)
-    float d = LinearizeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+    float d = LinearizeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r);
 #else
-    float4 cdn = tex2D(_CameraDepthNormalsTexture, uv);
+    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
     float d = DecodeFloatRG(cdn.zw);
 #endif
     return d * _ProjectionParams.z + CheckBounds(uv, d);
@@ -70,7 +70,7 @@ float SampleDepth(float2 uv)
 float3 SampleNormal(float2 uv)
 {
 #if defined(SOURCE_GBUFFER)
-    float3 norm = tex2D(_CameraGBufferTexture2, uv).xyz;
+    float3 norm = tex2Dlod(_CameraGBufferTexture2, float4(uv, 0, 0)).xyz;
     norm = norm * 2 - any(norm); // gets (0,0,0) when norm == 0
     norm = mul((float3x3)unity_WorldToCamera, norm);
 #if defined(VALIDATE_NORMALS)
@@ -78,7 +78,7 @@ float3 SampleNormal(float2 uv)
 #endif
     return norm;
 #else
-    float4 cdn = tex2D(_CameraDepthNormalsTexture, uv);
+    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
     return DecodeViewNormalStereo(cdn) * float3(1, 1, -1);
 #endif
 }
@@ -89,7 +89,7 @@ float SampleDepthNormal(float2 uv, out float3 normal)
     normal = SampleNormal(uv);
     return SampleDepth(uv);
 #else
-    float4 cdn = tex2D(_CameraDepthNormalsTexture, uv);
+    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
     normal = DecodeViewNormalStereo(cdn) * float3(1, 1, -1);
     float d = DecodeFloatRG(cdn.zw);
     return d * _ProjectionParams.z + CheckBounds(uv, d);
@@ -113,8 +113,8 @@ float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
 
 half4 frag(v2f_img input) : SV_Target
 {
-    const int kDiv1 = 20;
-    const int kDiv2 = 5;
+    const int kDiv1 = 13;
+    const int kDiv2 = 20;
 
     // Parameters used in coordinate conversion
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
@@ -123,20 +123,22 @@ half4 frag(v2f_img input) : SV_Target
     float3 n0;
     float d0 = SampleDepthNormal(input.uv, n0);
 
+    if (d0 > 100) return 1;
+
     float3 p0 = ReconstructViewPos(input.uv, d0, p11_22, p13_31);
 
     float acc = 0;
 
-    for (int i = 0; i < kDiv1; i++)
+    UNITY_LOOP for (int i = 0; i < kDiv1; i++)
     {
-        float phi = UVRandom(input.uv.x, input.uv.y + i) * UNITY_PI;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 20;
+        float phi = UVRandom(input.uv.x - i * 0.7828, input.uv.y + i * 0.2673) * UNITY_PI;
+        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 8;
 
         float2 uv1 = input.uv + duv;
         float2 uv2 = input.uv - duv;
 
-        float h1 = 0;
-        float h2 = 0;
+        float h1 = -1;
+        float h2 = -1;
 
         for (int j = 0; j < kDiv2; j++)
         {
@@ -156,7 +158,7 @@ half4 frag(v2f_img input) : SV_Target
         h1 = acos(h1);
         h2 = acos(h2);
 
-        float3 sn = float3(CosSin(phi).yx * float2(1, 1), 0);
+        float3 sn = float3(CosSin(phi).yx * float2(1, -1), 0);
         float3 np = n0 - sn * dot(sn, n0);
         float cont = length(np);
 
@@ -167,5 +169,5 @@ half4 frag(v2f_img input) : SV_Target
             0.25 * cont * (-cos(2 * h2 - n) + cos(n) + 2 * h2 * sin(n));
     }
 
-    return 2 * acc / kDiv1 / UNITY_PI;
+    return 2.5 * acc / kDiv1 / UNITY_PI;
 }
