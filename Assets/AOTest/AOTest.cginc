@@ -132,7 +132,7 @@ half4 frag(v2f_img input) : SV_Target
 
     UNITY_LOOP for (int i = 0; i < kDiv1; i++)
     {
-        float phi = UVRandom(input.uv.x - i * 0.3828, input.uv.y + i * 0.1673) * UNITY_PI * 2;
+        float phi = GradientNoise(input.uv + _MainTex_TexelSize.xy * i) * UNITY_PI;
         float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1.5;
 
         float2 uv1 = input.uv - duv;
