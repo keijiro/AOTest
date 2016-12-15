@@ -24,7 +24,7 @@
     </sensor>
 
     <shape type="obj">
-        <string name="filename" value="LowPoly.obj"/>
+        <string name="filename" value="Grid.obj"/>
     </shape>
 
 </scene>
