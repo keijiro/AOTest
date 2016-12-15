@@ -134,7 +134,7 @@ half4 frag(v2f_img input) : SV_Target
     UNITY_LOOP for (int i = 0; i < kDiv1; i++)
     {
         float phi = UVRandom(input.uv.x - i * 0.7828, input.uv.y + i * 0.2673) * UNITY_PI * 2;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 4;
+        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1;
 
         float2 uv1 = input.uv - duv;
         float2 uv2 = input.uv + duv;

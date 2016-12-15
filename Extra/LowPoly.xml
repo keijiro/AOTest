@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scene version="0.5.0">
+    <integrator type="ao">
+        <integer name="shadingSamples" value="10"/>
+    </integrator>
+
+    <sensor type="perspective">
+        <transform name="toWorld">
+            <lookAt origin="0, 6, 0" target="0, 0, 0" up="0, 0, 1"/>
+        </transform>
+
+        <string name="fovAxis" value="smaller"/>
+        <float name="fov" value="24"/>
+
+        <sampler type="ldsampler">
+            <integer name="sampleCount" value="64"/>
+        </sampler>
+
+        <film type="hdrfilm">
+            <integer name="width" value="512"/>
+            <integer name="height" value="512"/>
+            <rfilter type="gaussian"/>
+        </film>
+    </sensor>
+
+    <shape type="obj">
+        <string name="filename" value="LowPoly.obj"/>
+    </shape>
+
+</scene>
