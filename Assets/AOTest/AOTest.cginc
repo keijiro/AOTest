@@ -156,8 +156,8 @@ float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
 
 half4 frag(v2f_img input) : SV_Target
 {
-    const int kDiv1 = 24;
-    const int kDiv2 = 40;
+    const int kDiv1 = 4;
+    const int kDiv2 = 32;
 
     // Parameters used in coordinate conversion
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
@@ -175,8 +175,8 @@ half4 frag(v2f_img input) : SV_Target
 
     UNITY_LOOP for (int i = 0; i < kDiv1; i++)
     {
-        float phi = GradientNoise(input.uv + _MainTex_TexelSize.xy * i) * UNITY_PI;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 2;
+        float phi = (GradientNoise(input.uv) + i) * UNITY_PI / kDiv1;
+        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1.5;
 
         float2 uv1 = input.uv - duv;
         float2 uv2 = input.uv + duv;
