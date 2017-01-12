@@ -202,20 +202,21 @@ half4 frag(v2f_img input) : SV_Target
         h1 = -ao_acos(h1);
         h2 = +ao_acos(h2);
 
-        float3 sn = normalize(cross(v0, float3(CosSin(phi), 0)));
+        float3 dv = float3(CosSin(phi), 0);
+        float3 sn = normalize(cross(v0, dv));
         float3 np = n0 - sn * dot(sn, n0);
-        float cont = length(np);
 
         float n = ao_acos(max(min(1, dot(np, v0) / length(np)), -1));
-        if (dot(np, float3(CosSin(phi), 0)) > 0) n = -n;
+        if (dot(np, dv) > 0) n = -n;
 
         h1 = n + max(h1 - n, -0.5 * UNITY_PI);
         h2 = n + min(h2 - n,  0.5 * UNITY_PI);
 
-        float a1 = -cos(2 * h1 - n) + cos(n) + 2 * h1 * sin(n);
-        float a2 = -cos(2 * h2 - n) + cos(n) + 2 * h2 * sin(n);
+        float2 cossin_n = CosSin(n);
+        float a1 = -cos(2 * h1 - n) + cossin_n.x + 2 * h1 * cossin_n.y;
+        float a2 = -cos(2 * h2 - n) + cossin_n.x + 2 * h2 * cossin_n.y;
 
-        vis += (a1 + a2) / 4 * cont;
+        vis += (a1 + a2) / 4 * length(np);
     }
 
     return vis / kDiv1;
