@@ -156,42 +156,53 @@ float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
 
 half4 frag(v2f_img input) : SV_Target
 {
-    const int kDiv1 = 4;
-    const int kDiv2 = 32;
+    const int kDirections = 4;
+    const int kSearch = 32;
 
-    // Parameters used in coordinate conversion
+    // Parameters used in coordinate conversion.
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
     float2 p13_31 = float2(unity_CameraProjection._13, unity_CameraProjection._23);
 
+    // Center sample.
     float3 n0;
     float d0 = SampleDepthNormal(input.uv, n0);
 
+    // Early rejection FIXME: this is not a correct way.
     if (d0 > 100) return 1;
 
+    // p0: View space position of the center sample.
+    // v0: Normalized view vector.
     float3 p0 = ReconstructViewPos(input.uv, d0, p11_22, p13_31);
     float3 v0 = normalize(-p0);
 
+    // Visibility accumulation.
     float vis = 0;
 
-    UNITY_LOOP for (int i = 0; i < kDiv1; i++)
+    UNITY_LOOP for (int i = 0; i < kDirections; i++)
     {
-        float phi = (GradientNoise(input.uv) + i) * UNITY_PI / kDiv1;
+        // Sampling direction.
+        float phi = (GradientNoise(input.uv) + i) * UNITY_PI / kDirections;
         float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1.5;
 
+        // Start from one step further.
         float2 uv1 = input.uv + duv;
         float2 uv2 = input.uv - duv;
 
+        // Cosine of horizons.
         float h1 = -1;
         float h2 = -1;
 
-        for (int j = 0; j < kDiv2; j++)
+        for (int j = 0; j < kSearch; j++)
         {
+            // Sample the depths.
             float z1 = SampleDepth(uv1);
             float z2 = SampleDepth(uv2);
 
+            // View space difference from the center point.
             float3 d1 = ReconstructViewPos(uv1, z1, p11_22, p13_31) - p0;
             float3 d2 = ReconstructViewPos(uv2, z2, p11_22, p13_31) - p0;
 
+            // Calculate the cosine and compare with the horizons.
             h1 = max(h1, dot(d1, v0) / length(d1));
             h2 = max(h2, dot(d2, v0) / length(d2));
 
@@ -199,25 +210,29 @@ half4 frag(v2f_img input) : SV_Target
             uv2 -= duv;
         }
 
+        // Convert the horizons into angles between the view vector.
         h1 = -ao_acos(h1);
         h2 = +ao_acos(h2);
 
+        // Project the normal vector onto the sampling slice plane.
         float3 dv = float3(CosSin(phi), 0);
         float3 sn = normalize(cross(v0, dv));
         float3 np = n0 - sn * dot(sn, n0);
 
-        float n = ao_acos(max(min(1, dot(np, v0) / length(np)), -1));
+        // Calculate the angle between the projected normal and the view vector.
+        float n = ao_acos(min(dot(np, v0) / length(np), 1));
         if (dot(np, dv) > 0) n = -n;
 
+        // Clamp the horizon angles with the normal hemisphere.
         h1 = n + max(h1 - n, -0.5 * UNITY_PI);
         h2 = n + min(h2 - n,  0.5 * UNITY_PI);
 
+        // Cosine weighting GTAO integrator.
         float2 cossin_n = CosSin(n);
         float a1 = -cos(2 * h1 - n) + cossin_n.x + 2 * h1 * cossin_n.y;
         float a2 = -cos(2 * h2 - n) + cossin_n.x + 2 * h2 * cossin_n.y;
-
         vis += (a1 + a2) / 4 * length(np);
     }
 
-    return vis / kDiv1;
+    return vis / kDirections;
 }
