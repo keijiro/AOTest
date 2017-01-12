@@ -178,16 +178,16 @@ half4 frag(v2f_img input) : SV_Target
         float phi = (GradientNoise(input.uv) + i) * UNITY_PI / kDiv1;
         float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1.5;
 
-        float2 uv1 = input.uv - duv;
-        float2 uv2 = input.uv + duv;
+        float2 uv1 = input.uv + duv;
+        float2 uv2 = input.uv - duv;
 
         float h1 = -1;
         float h2 = -1;
 
         for (int j = 0; j < kDiv2; j++)
         {
-            float z1 = SampleDepth(uv2);
-            float z2 = SampleDepth(uv1);
+            float z1 = SampleDepth(uv1);
+            float z2 = SampleDepth(uv2);
 
             float3 d1 = ReconstructViewPos(uv1, z1, p11_22, p13_31) - p0;
             float3 d2 = ReconstructViewPos(uv2, z2, p11_22, p13_31) - p0;
@@ -195,8 +195,8 @@ half4 frag(v2f_img input) : SV_Target
             h1 = max(h1, dot(d1, v0) / length(d1));
             h2 = max(h2, dot(d2, v0) / length(d2));
 
-            uv1 -= duv;
-            uv2 += duv;
+            uv1 += duv;
+            uv2 -= duv;
         }
 
         h1 = -ao_acos(h1);
