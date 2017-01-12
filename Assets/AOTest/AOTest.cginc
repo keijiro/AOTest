@@ -18,22 +18,48 @@ float2 CosSin(float theta)
     return float2(cs, sn);
 }
 
-// Fast approximation of the arccos function by Sébastien Lagarde
-// http://goo.gl/H9Qdom
-float fastacos(float x)
+#if !defined(SHADER_API_PSSL) && !defined(SHADER_API_XBOXONE)
+
+// Use the standard sqrt as default.
+float ao_sqrt(float x)
+{
+    return sqrt(x);
+}
+
+// Fast approximation of acos from Lagarde 2014 http://goo.gl/H9Qdom
+float ao_acos(float x)
 {
 #if 0
     // Polynomial degree 2
     float ax = abs(x);
-    float y = (1.56467 - 0.155972 * ax) * sqrt(1 - ax);
+    float y = (1.56467 - 0.155972 * ax) * ao_sqrt(1 - ax);
     return x < 0 ? UNITY_PI - y : y;
 #else
     // Polynomial degree 3
     float ax = abs(x);
-    float y = ((0.0464619 * ax - 0.201877) * ax + 1.57018) * sqrt(1 - ax);
+    float y = ((0.0464619 * ax - 0.201877) * ax + 1.57018) * ao_sqrt(1 - ax);
     return x < 0 ? UNITY_PI - y : y;
 #endif
 }
+
+#else
+
+// On PS4 and Xbox One, use the optimized sqrt/acos functions
+// from the original GTAO paper.
+
+float ao_sqrt(float x)
+{
+    return asfloat(0x1FBD1DF5 + (asint(x) >> 1));
+}
+
+float ao_acos(float x)
+{
+    float y = -0.156583 * abs(x) + UNITY_PI / 2;
+    y *= ao_sqrt(1 - abs(x));
+    return x < 0 ? UNITY_PI - y : y;
+}
+
+#endif
 
 // Pseudo random number generator with 2D coordinates
 float UVRandom(float u, float v)
@@ -173,14 +199,14 @@ half4 frag(v2f_img input) : SV_Target
             uv2 += duv;
         }
 
-        h1 = -fastacos(h1);
-        h2 = +fastacos(h2);
+        h1 = -ao_acos(h1);
+        h2 = +ao_acos(h2);
 
         float3 sn = normalize(cross(v0, float3(CosSin(phi), 0)));
         float3 np = n0 - sn * dot(sn, n0);
         float cont = length(np);
 
-        float n = fastacos(max(min(1, dot(np, v0) / length(np)), -1));
+        float n = ao_acos(max(min(1, dot(np, v0) / length(np)), -1));
         if (dot(np, float3(CosSin(phi), 0)) > 0) n = -n;
 
         h1 = n + max(h1 - n, -0.5 * UNITY_PI);
