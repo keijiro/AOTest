@@ -10,6 +10,8 @@ sampler2D _CameraGBufferTexture2;
 sampler2D_float _CameraDepthTexture;
 sampler2D _CameraDepthNormalsTexture;
 
+half _AttenRadius;
+
 // Trigonometric function utility
 float2 CosSin(float theta)
 {
@@ -201,10 +203,16 @@ half4 frag(v2f_img input) : SV_Target
             // View space difference from the center point.
             float3 d1 = ReconstructViewPos(uv1, z1, p11_22, p13_31) - p0;
             float3 d2 = ReconstructViewPos(uv2, z2, p11_22, p13_31) - p0;
+            float l_d1 = length(d1);
+            float l_d2 = length(d2);
+
+            // Distance based attenuation.
+            half atten1 = saturate(l_d1 * 2 / _AttenRadius - 1);
+            half atten2 = saturate(l_d2 * 2 / _AttenRadius - 1);
 
             // Calculate the cosine and compare with the horizons.
-            h1 = max(h1, dot(d1, v0) / length(d1));
-            h2 = max(h2, dot(d2, v0) / length(d2));
+            h1 = max(h1, lerp(dot(d1, v0) / l_d1, -1, atten1));
+            h2 = max(h2, lerp(dot(d2, v0) / l_d2, -1, atten2));
 
             uv1 += duv;
             uv2 -= duv;
