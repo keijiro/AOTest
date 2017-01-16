@@ -194,6 +194,9 @@ half4 frag(v2f_img input) : SV_Target
         float h1 = -1;
         float h2 = -1;
 
+        float ph1 = 0;
+        float ph2 = 0;
+
         for (int j = 0; j < kSearch; j++)
         {
             // Sample the depths.
@@ -211,8 +214,30 @@ half4 frag(v2f_img input) : SV_Target
             half atten2 = saturate(l_d2 * 2 / _AttenRadius - 1);
 
             // Calculate the cosine and compare with the horizons.
+            #if 1
+
             h1 = max(h1, lerp(dot(d1, v0) / l_d1, -1, atten1));
             h2 = max(h2, lerp(dot(d2, v0) / l_d2, -1, atten2));
+
+            #else
+
+            half nh1 = lerp(dot(d1, v0) / l_d1, -1, atten1);
+            half nh2 = lerp(dot(d2, v0) / l_d2, -1, atten2);
+
+            if (nh1 > ph1)
+                h1 = max(h1, nh1);
+            else
+                h1 = lerp(h1, nh1, 0.1);
+
+            if (nh2 > ph2)
+                h2 = max(h2, nh2);
+            else
+                h2 = lerp(h2, nh2, 0.1);
+
+            ph1 = nh1;
+            ph2 = nh2;
+
+            #endif
 
             uv1 += duv;
             uv2 -= duv;
