@@ -159,7 +159,6 @@ float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
 half4 frag(v2f_img input) : SV_Target
 {
     const int kDirections = 4;
-    const int kSearch = 32;
 
     // Parameters used in coordinate conversion.
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
@@ -180,6 +179,10 @@ half4 frag(v2f_img input) : SV_Target
     // Visibility accumulation.
     float vis = 0;
 
+    // Search radius.
+    float sr = _AttenRadius * unity_CameraProjection._11 * 0.5 / p0.z;
+    sr = min(sr * _MainTex_TexelSize.z, 80);
+
     UNITY_LOOP for (int i = 0; i < kDirections; i++)
     {
         // Sampling direction.
@@ -194,7 +197,7 @@ half4 frag(v2f_img input) : SV_Target
         float h1 = -1;
         float h2 = -1;
 
-        for (int j = 0; j < kSearch; j++)
+        for (float j = 0; j < sr; j += 1.5)
         {
             // Sample the depths.
             float z1 = SampleDepth(uv1);
