@@ -1,168 +1,22 @@
-#include "UnityCG.cginc"
-
 #define SOURCE_GBUFFER
 #define VALIDATE_NORMALS
 
-sampler2D _MainTex;
-float4 _MainTex_TexelSize;
+#include "Common.cginc"
 
-sampler2D _CameraGBufferTexture2;
-sampler2D_float _CameraDepthTexture;
-sampler2D _CameraDepthNormalsTexture;
-
-half _AttenRadius;
-
-// Trigonometric function utility
-float2 CosSin(float theta)
-{
-    float sn, cs;
-    sincos(theta, sn, cs);
-    return float2(cs, sn);
-}
-
-#if !defined(SHADER_API_PSSL) && !defined(SHADER_API_XBOXONE)
-
-// Use the standard sqrt as default.
-float ao_sqrt(float x)
-{
-    return sqrt(x);
-}
-
-// Fast approximation of acos from Lagarde 2014 http://goo.gl/H9Qdom
-float ao_acos(float x)
-{
-#if 0
-    // Polynomial degree 2
-    float ax = abs(x);
-    float y = (1.56467 - 0.155972 * ax) * ao_sqrt(1 - ax);
-    return x < 0 ? UNITY_PI - y : y;
-#else
-    // Polynomial degree 3
-    float ax = abs(x);
-    float y = ((0.0464619 * ax - 0.201877) * ax + 1.57018) * ao_sqrt(1 - ax);
-    return x < 0 ? UNITY_PI - y : y;
-#endif
-}
-
-#else
-
-// On PS4 and Xbox One, use the optimized sqrt/acos functions
-// from the original GTAO paper.
-
-float ao_sqrt(float x)
-{
-    return asfloat(0x1FBD1DF5 + (asint(x) >> 1));
-}
-
-float ao_acos(float x)
-{
-    float y = -0.156583 * abs(x) + UNITY_PI / 2;
-    y *= ao_sqrt(1 - abs(x));
-    return x < 0 ? UNITY_PI - y : y;
-}
-
-#endif
-
-// Pseudo random number generator with 2D coordinates
-float UVRandom(float u, float v)
-{
-    float f = dot(float2(12.9898, 78.233), float2(u, v));
-    return frac(43758.5453 * sin(f));
-}
-
-// Interleaved gradient function from Jimenez 2014 http://goo.gl/eomGso
-float GradientNoise(float2 uv)
-{
-    uv = floor(uv * _ScreenParams.xy);
-    float f = dot(float2(0.06711056f, 0.00583715f), uv);
-    return frac(52.9829189f * frac(f));
-}
-
-// Boundary check for depth sampler
-// (returns a very large value if it lies out of bounds)
-float CheckBounds(float2 uv, float d)
-{
-    float ob = any(uv < 0) + any(uv > 1);
-#if defined(UNITY_REVERSED_Z)
-    ob += (d <= 0.00001);
-#else
-    ob += (d >= 0.99999);
-#endif
-    return ob * 1e8;
-}
-
-// Z buffer depth to linear 0-1 depth
-float LinearizeDepth(float z)
-{
-    float isOrtho = unity_OrthoParams.w;
-    float isPers = 1 - unity_OrthoParams.w;
-    z *= _ZBufferParams.x;
-    return (1 - isOrtho * z) / (isPers * z + _ZBufferParams.y);
-}
-
-// Depth/normal sampling functions
-float SampleDepth(float2 uv)
-{
-#if defined(SOURCE_GBUFFER) || defined(SOURCE_DEPTH)
-    float d = LinearizeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r);
-#else
-    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
-    float d = DecodeFloatRG(cdn.zw);
-#endif
-    return d * _ProjectionParams.z + CheckBounds(uv, d);
-}
-
-float3 SampleNormal(float2 uv)
-{
-#if defined(SOURCE_GBUFFER)
-    float3 norm = tex2Dlod(_CameraGBufferTexture2, float4(uv, 0, 0)).xyz;
-    norm = norm * 2 - any(norm); // gets (0,0,0) when norm == 0
-    norm = mul((float3x3)unity_WorldToCamera, norm);
-#if defined(VALIDATE_NORMALS)
-    norm = normalize(norm);
-#endif
-    return norm;
-#else
-    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
-    return DecodeViewNormalStereo(cdn) * float3(1, 1, -1);
-#endif
-}
-
-float SampleDepthNormal(float2 uv, out float3 normal)
-{
-#if defined(SOURCE_GBUFFER) || defined(SOURCE_DEPTH)
-    normal = SampleNormal(uv);
-    return SampleDepth(uv);
-#else
-    float4 cdn = tex2Dlod(_CameraDepthNormalsTexture, float4(uv, 0, 0));
-    normal = DecodeViewNormalStereo(cdn) * float3(1, 1, -1);
-    float d = DecodeFloatRG(cdn.zw);
-    return d * _ProjectionParams.z + CheckBounds(uv, d);
-#endif
-}
-
-// Check if the camera is perspective.
-// (returns 1.0 when orthographic)
-float CheckPerspective(float x)
-{
-    return lerp(x, 1, unity_OrthoParams.w);
-}
-
-// Reconstruct view-space position from UV and depth.
-// p11_22 = (unity_CameraProjection._11, unity_CameraProjection._22)
-// p13_31 = (unity_CameraProjection._13, unity_CameraProjection._23)
-float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
-{
-    return float3((uv * 2 - 1 - p13_31) / p11_22 * CheckPerspective(depth), depth);
-}
+// Uniforms given from the script
+// These vectors consist of each value and their rcp value (x, 1/x)
+half2 _SearchRadius;
+half2 _SlicePerPixel;
+half2 _SamplePerSlice;
 
 half4 frag(v2f_img input) : SV_Target
 {
-    const int kDirections = 4;
-
-    // Parameters used in coordinate conversion.
+    // Parameters used for coordinate conversion.
     float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
     float2 p13_31 = float2(unity_CameraProjection._13, unity_CameraProjection._23);
+
+    // Interleaved gradient noise (used for dithering).
+    half dither = GradientNoise(input.uv);
 
     // Center sample.
     float3 n0;
@@ -176,28 +30,33 @@ half4 frag(v2f_img input) : SV_Target
     float3 p0 = ReconstructViewPos(input.uv, d0, p11_22, p13_31);
     float3 v0 = normalize(-p0);
 
+    // Screen space search radius. Up to 1/4 screen width.
+    float radius = _SearchRadius.x * unity_CameraProjection._11 * 0.5 / p0.z;
+    radius = min(radius, 0.25) * _MainTex_TexelSize.z;
+
+    // Step width (interval between samples).
+    float stepw = max(1.5, radius * _SamplePerSlice.y);
+
     // Visibility accumulation.
     float vis = 0;
 
-    // Search radius.
-    float sr = _AttenRadius * unity_CameraProjection._11 * 0.5 / p0.z;
-    sr = min(sr * _MainTex_TexelSize.z, 80);
-
-    UNITY_LOOP for (int i = 0; i < kDirections; i++)
+    // Slice loop
+    UNITY_LOOP for (half sl01 = 0; sl01 < 1; sl01 += _SlicePerPixel.y)
     {
         // Sampling direction.
-        float phi = (GradientNoise(input.uv) + i) * UNITY_PI / kDirections;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * 1.5;
+        half phi = (sl01 + dither) * UNITY_PI;
+        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * stepw;
 
         // Start from one step further.
-        float2 uv1 = input.uv + duv;
-        float2 uv2 = input.uv - duv;
+        float2 uv1 = input.uv + duv * (0.5 + sl01);
+        float2 uv2 = input.uv - duv * (0.5 + sl01);
 
         // Cosine of horizons.
         float h1 = -1;
         float h2 = -1;
 
-        for (float j = 0; j < sr; j += 1.5)
+        // Horizon scan loop
+        UNITY_LOOP for (float hr = 0; hr < radius; hr += stepw)
         {
             // Sample the depths.
             float z1 = SampleDepth(uv1);
@@ -210,8 +69,8 @@ half4 frag(v2f_img input) : SV_Target
             float l_d2 = length(d2);
 
             // Distance based attenuation.
-            half atten1 = saturate(l_d1 * 2 / _AttenRadius - 1);
-            half atten2 = saturate(l_d2 * 2 / _AttenRadius - 1);
+            half atten1 = saturate(l_d1 * 2 * _SearchRadius.y - 1);
+            half atten2 = saturate(l_d2 * 2 * _SearchRadius.y - 1);
 
             // Calculate the cosine and compare with the horizons.
             h1 = max(h1, lerp(dot(d1, v0) / l_d1, -1, atten1));
@@ -245,5 +104,5 @@ half4 frag(v2f_img input) : SV_Target
         vis += (a1 + a2) / 4 * length(np);
     }
 
-    return vis / kDirections;
+    return vis * _SlicePerPixel.y;
 }
