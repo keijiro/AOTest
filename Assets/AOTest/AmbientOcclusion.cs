@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace AOTest
 {
@@ -7,9 +6,20 @@ namespace AOTest
     [RequireComponent(typeof(Camera))]
     public class AmbientOcclusion : MonoBehaviour
     {
-        [SerializeField] float _searchRadius = 1;
-        [SerializeField] int _slicePerPixel = 4;
-        [SerializeField] int _samplePerSlice = 18;
+        [SerializeField]
+        [Tooltip("The maximum distance of the horizon search. " +
+                 "This value is also used for distance attenuation.")]
+        float _radius = 1;
+
+        [SerializeField]
+        [Tooltip("The number of the horizon search slices. " + 
+                 "This value affects the accuracy of the AO estimation.")]
+        int _sliceCount = 4;
+
+        [SerializeField]
+        [Tooltip("The maximum number of samples in each horizon search slice. " +
+                 "The total sample count is determined by (Slice Count) x (Samples Per Slice).")]
+        int _samplesPerSlice = 8;
 
         [SerializeField, HideInInspector] Shader _shader;
 
@@ -23,9 +33,9 @@ namespace AOTest
 
         void OnValidate()
         {
-            _searchRadius = Mathf.Max(_searchRadius, 1e-3f);
-            _slicePerPixel = Mathf.Clamp(_slicePerPixel, 1, 64);
-            _samplePerSlice = Mathf.Clamp(_samplePerSlice, 1, 128);
+            _radius = Mathf.Max(_radius, 1e-3f);
+            _sliceCount = Mathf.Clamp(_sliceCount, 1, 64);
+            _samplesPerSlice = Mathf.Clamp(_samplesPerSlice, 1, 128);
         }
 
         void OnDestroy()
@@ -39,9 +49,9 @@ namespace AOTest
         [ImageEffectOpaque]
         void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            _material.SetVector("_SearchRadius", new Vector2(_searchRadius, 1.0f / _searchRadius));
-            _material.SetVector("_SlicePerPixel", new Vector2(_slicePerPixel, 1.0f / _slicePerPixel));
-            _material.SetVector("_SamplePerSlice", new Vector2(_samplePerSlice, 1.0f / _samplePerSlice));
+            _material.SetVector("_Radius", new Vector2(_radius, 1.0f / _radius));
+            _material.SetVector("_Slices", new Vector2(_sliceCount, 1.0f / _sliceCount));
+            _material.SetVector("_Samples", new Vector2(_samplesPerSlice, 1.0f / _samplesPerSlice));
             Graphics.Blit(source, destination, _material, 0);
         }
     }

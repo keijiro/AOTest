@@ -3,27 +3,23 @@
 
 #include "Common.cginc"
 
-// Uniforms given from the script
-// These vectors consist of each value and their rcp value (x, 1/x)
-half2 _SearchRadius;
-half2 _SlicePerPixel;
-half2 _SamplePerSlice;
+// Parameters given from the script consisting of (value, 1/value).
+half2 _Radius;
+half2 _Slices;
+half2 _Samples;
 
 half4 frag(v2f_img input) : SV_Target
 {
-    // Parameters used for coordinate conversion.
-    float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
-    float2 p13_31 = float2(unity_CameraProjection._13, unity_CameraProjection._23);
-
-    // Interleaved gradient noise (used for dithering).
-    half dither = GradientNoise(input.uv);
-
     // Center sample.
     float3 n0;
     float d0 = SampleDepthNormal(input.uv, n0);
 
-    // Early rejection FIXME: this is not a correct way.
-    if (d0 > 100) return 1;
+    // Early Z rejection.
+    if (d0 >= _ProjectionParams.z * 0.999) return 1;
+
+    // Parameters used for inverse projection.
+    float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
+    float2 p13_31 = float2(unity_CameraProjection._13, unity_CameraProjection._23);
 
     // p0: View space position of the center sample.
     // v0: Normalized view vector.
@@ -31,32 +27,35 @@ half4 frag(v2f_img input) : SV_Target
     float3 v0 = normalize(-p0);
 
     // Screen space search radius. Up to 1/4 screen width.
-    float radius = _SearchRadius.x * unity_CameraProjection._11 * 0.5 / p0.z;
+    float radius = _Radius.x * unity_CameraProjection._11 * 0.5 / p0.z;
     radius = min(radius, 0.25) * _MainTex_TexelSize.z;
 
     // Step width (interval between samples).
-    float stepw = max(1.5, radius * _SamplePerSlice.y);
+    float stepw = max(1.5, radius * _Samples.y);
 
-    // Visibility accumulation.
-    float vis = 0;
+    // Interleaved gradient noise (used for dithering).
+    half dither = GradientNoise(input.uv);
+
+    // AO value wll be accumulated into here.
+    float ao = 0;
 
     // Slice loop
-    UNITY_LOOP for (half sl01 = 0; sl01 < 1; sl01 += _SlicePerPixel.y)
+    UNITY_LOOP for (half sl01 = _Slices.y * 0.5; sl01 < 1; sl01 += _Slices.y)
     {
-        // Sampling direction.
+        // Slice plane angle and sampling direction.
         half phi = (sl01 + dither) * UNITY_PI;
-        float2 duv = _MainTex_TexelSize.xy * CosSin(phi) * stepw;
+        half2 cossin_phi = CosSin(phi);
+        float2 duv = _MainTex_TexelSize.xy * cossin_phi * stepw;
 
         // Start from one step further.
         float2 uv1 = input.uv + duv * (0.5 + sl01);
         float2 uv2 = input.uv - duv * (0.5 + sl01);
 
-        // Cosine of horizons.
+        // Determine the horizons.
         float h1 = -1;
         float h2 = -1;
 
-        // Horizon scan loop
-        UNITY_LOOP for (float hr = 0; hr < radius; hr += stepw)
+        UNITY_LOOP for (half hr = stepw * 0.5; hr < radius; hr += stepw)
         {
             // Sample the depths.
             float z1 = SampleDepth(uv1);
@@ -69,8 +68,8 @@ half4 frag(v2f_img input) : SV_Target
             float l_d2 = length(d2);
 
             // Distance based attenuation.
-            half atten1 = saturate(l_d1 * 2 * _SearchRadius.y - 1);
-            half atten2 = saturate(l_d2 * 2 * _SearchRadius.y - 1);
+            half atten1 = saturate(l_d1 * 2 * _Radius.y - 1);
+            half atten2 = saturate(l_d2 * 2 * _Radius.y - 1);
 
             // Calculate the cosine and compare with the horizons.
             h1 = max(h1, lerp(dot(d1, v0) / l_d1, -1, atten1));
@@ -84,8 +83,8 @@ half4 frag(v2f_img input) : SV_Target
         h1 = -ao_acos(h1);
         h2 = +ao_acos(h2);
 
-        // Project the normal vector onto the sampling slice plane.
-        float3 dv = float3(CosSin(phi), 0);
+        // Project the normal vector onto the slice plane.
+        float3 dv = float3(cossin_phi, 0);
         float3 sn = normalize(cross(v0, dv));
         float3 np = n0 - sn * dot(sn, n0);
 
@@ -101,8 +100,8 @@ half4 frag(v2f_img input) : SV_Target
         float2 cossin_n = CosSin(n);
         float a1 = -cos(2 * h1 - n) + cossin_n.x + 2 * h1 * cossin_n.y;
         float a2 = -cos(2 * h2 - n) + cossin_n.x + 2 * h2 * cossin_n.y;
-        vis += (a1 + a2) / 4 * length(np);
+        ao += (a1 + a2) / 4 * length(np);
     }
 
-    return vis * _SlicePerPixel.y;
+    return ao * _Slices.y;
 }
