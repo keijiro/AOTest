@@ -33,23 +33,27 @@ half4 frag(v2f_img input) : SV_Target
     // Step width (interval between samples).
     float stepw = max(1.5, radius * _Samples.y);
 
-    // Interleaved gradient noise (used for dithering).
-    half dither = GradientNoise(input.uv);
+    // Spatial noise distribution (ordered dithering).
+    float2 sc4 = input.uv.xy * _MainTex_TexelSize.zw * 0.25;
+    half dither1 = frac(sc4.x + sc4.y) + frac(sc4.x) * 0.25;
+    half dither2 = frac(sc4.y - sc4.x);
+
+    // Sampling direction.
+    half phi = _Slices.y * dither1;
 
     // AO value wll be accumulated into here.
     float ao = 0;
 
     // Slice loop
-    UNITY_LOOP for (half sl01 = _Slices.y * 0.5; sl01 < 1; sl01 += _Slices.y)
+    UNITY_LOOP for (half sl = _Slices.y * 0.5; sl < 1; sl += _Slices.y)
     {
-        // Slice plane angle and sampling direction.
-        half phi = (sl01 + dither) * UNITY_PI;
-        half2 cossin_phi = CosSin(phi);
-        float2 duv = _MainTex_TexelSize.xy * cossin_phi * stepw;
+        // Get the sampling direction vector.
+        half2 cossin_phi = CosSin(phi * UNITY_PI);
+        float2 duv = _MainTex_TexelSize.xy * cossin_phi;
 
         // Start from one step further.
-        float2 uv1 = input.uv + duv * (0.5 + sl01);
-        float2 uv2 = input.uv - duv * (0.5 + sl01);
+        float2 uv1 = input.uv + duv * (dither2 * stepw + 1.5);
+        float2 uv2 = input.uv - duv * (dither2 * stepw + 1.5);
 
         // Determine the horizons.
         float h1 = -1;
@@ -75,8 +79,8 @@ half4 frag(v2f_img input) : SV_Target
             h1 = max(h1, lerp(dot(d1, v0) / l_d1, -1, atten1));
             h2 = max(h2, lerp(dot(d2, v0) / l_d2, -1, atten2));
 
-            uv1 += duv;
-            uv2 -= duv;
+            uv1 += duv * stepw;
+            uv2 -= duv * stepw;
         }
 
         // Convert the horizons into angles between the view vector.
@@ -101,6 +105,8 @@ half4 frag(v2f_img input) : SV_Target
         float a1 = -cos(2 * h1 - n) + cossin_n.x + 2 * h1 * cossin_n.y;
         float a2 = -cos(2 * h2 - n) + cossin_n.x + 2 * h2 * cossin_n.y;
         ao += (a1 + a2) / 4 * length(np);
+
+        phi += _Slices.y;
     }
 
     return ao * _Slices.y;
